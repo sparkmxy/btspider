@@ -198,7 +198,7 @@ func (this *KRPCQuery) Encode()([]byte,error){
 			"token" : this.token,
 		}
 	default:
-		return nil,errors.New("Unkown type.")
+		return nil,errors.New("Unknown type.")
 	}
 	return bencode.Marshal(data)
 }
@@ -243,7 +243,6 @@ func decodeCompactNodes(data []byte) []*node {
 			addr : net.UDPAddr{
 				IP : net.IPv4(data[i+20],data[i+21],data[i+22],data[i+23]),
 				Port : int(binary.LittleEndian.Uint16(data[i+24:i+26])),
-
 			},
 		}
 		ret = append(ret, o)

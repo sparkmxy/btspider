@@ -2,16 +2,28 @@
 package main
 
 import (
+	"collect"
 	"dht"
-	"log"
+)
+
+var (
+	dhtnode = dht.NewNode()
+	collector = collect.NewCollector()
 )
 
 func handlePeer(ip string,port int,infohash,peerid string){
-	log.Println("new announce_peer query", infohash)
+	if err := collector.Get(&collect.Request{
+			IP: 		ip,
+			Port:		port,
+			InfoHash:	infohash,
+			PeerID:		peerid,
+		});err != nil {
+		panic(err)
+	}
 }
 
 func main(){
-	dhtnode := dht.NewNode()
+	defer collector.Stop()
 	dhtnode.Create("random","0.0.0.0:8661",handlePeer)
 	dhtnode.Run()
 }

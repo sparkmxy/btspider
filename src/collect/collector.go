@@ -1,5 +1,6 @@
 package collect
 
+import "errors"
 
 const maxpendendingN = 5000
 
@@ -11,7 +12,15 @@ type Collector struct {
 
 
 func NewCollector() *Collector{
+	ret := &Collector{
+		make(chan struct{}),
+		make(chan *metadataQuery),
+		make(chan struct{}),
+	}
 
+	go ret.work()
+
+	return ret
 }
 
 
@@ -42,4 +51,16 @@ func (this *Collector)Stop(){
 	close(this.closeEvent)
 	close(this.HandleQueryEvent)
 	close(this.queryEvent)
+}
+
+func (this *Collector) Get(request *Request)  error{
+	query := newMetadataQuery(request)
+
+	select {
+	case this.queryEvent <- query:
+	default:
+		return errors.New("too many queries")
+	}
+
+	return nil
 }

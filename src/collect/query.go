@@ -1,10 +1,9 @@
 package collect
 
 import (
-	"bufio"
 	"bytes"
-	"debug/dwarf"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -58,11 +57,12 @@ func (this *metadataQuery) work(collector *Collector){
 }
 
 func (this *metadataQuery)handleError()  {
-
+	log.Println("error: ",this.err)
 }
 
 func (this *metadataQuery)handleMetadata(){
-
+	magnet := fmt.Sprintf("magnet:?xt=urn:btih:%s",this.InfoHash)
+	log.Println(magnet,this.result.Name)
 }
 
 const(
@@ -117,9 +117,17 @@ func (this *metadataQuery) getMetadata()error{
 	if N > maxPieceN{
 		return errors.New("too many pieces")
 	}
+
+	for i :=0; i<int(N) ;i++{
+		err := sendRequest(conn,int(utMetadata),i)
+		if err != nil{
+			return err
+		}
+	}
+
 	pieces := make([][]byte,int(N))
 
-getPieces:
+getPieces:   // loop label
 	for{
 		select {
 		case <-time.After(getPieceTimeout):

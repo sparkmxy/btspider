@@ -184,6 +184,14 @@ func (this *DHTNode) Run(){
 
 	go this.Join()
 
+	for i := range bootstrapNodes{
+		udpAddr, err := net.ResolveUDPAddr("udp",bootstrapNodes[i])
+		if err != nil{
+			log.Println(err)
+			continue
+		}
+		this.FindNode(udpAddr,generateID())
+	}
 	log.Println("Join the DHT network...")
 
 	this.listenConsole()

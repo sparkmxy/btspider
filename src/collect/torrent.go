@@ -1,6 +1,7 @@
 package collect
 
 import (
+	"bencode"
 	"encoding/hex"
 	"errors"
 )
