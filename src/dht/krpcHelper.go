@@ -1,10 +1,10 @@
 package dht
 
 import (
+	"bencode"
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/IncSW/go-bencode"
 	"net"
 )
 
