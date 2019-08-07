@@ -2,6 +2,7 @@ package dht
 
 import (
 	"encoding/hex"
+	"fmt"
 	"log"
 	"math/rand"
 	"net"
@@ -75,7 +76,7 @@ func (this *DHTNode)handleKRPCPacket(address *net.UDPAddr, raw []byte){
 		Q := new(KRPCQuery)
 		Q.LoadFormMap(msg.content)
 
-		this.RT.notify(&node{
+		this.RT.Notify(&node{
 			Q.id,
 			*address,
 		})
@@ -92,6 +93,8 @@ func (this *DHTNode)handleKRPCPacket(address *net.UDPAddr, raw []byte){
 	}else if msg.isResponse(){
 		R := new(KRPCResponse)
 		R.LoadFromMap(msg.content)
+
+		log.Println("get response: from ",R.queryID)
 
 		this.RT.Notify(&node{
 			R.queryID,
@@ -114,9 +117,9 @@ func (this *DHTNode) listenConsole() {
 	<-ch
 
 	log.Println("Quit...")
-	close(this.findNodeEvent)
 	close(this.quitEvent)
-
+	time.Sleep(500 * time.Millisecond)
+	close(this.findNodeEvent)
 	this.RT.Stop()
 
 	this.running = false
@@ -152,7 +155,7 @@ func (this *DHTNode) Join(){
 		id := generateID()
 		select {
 		case <-this.quitEvent:
-			break
+			return
 		case o := <-this.findNodeEvent:
 			this.FindNode(&o.addr,id)
 		case <- ticker.C:
@@ -170,6 +173,11 @@ func (this *DHTNode) Serve() error{
 	if err !=nil{
 		return err
 	}
+	go func() {
+		err := this.readUDP(conn)
+		log.Println("readUDP: ",err)
+
+	}()
 	this.udpconn = conn
 	return nil
 }
@@ -177,7 +185,7 @@ func (this *DHTNode) Serve() error{
 func (this *DHTNode) Run(){
 	this.running = true
 
-
+	log.Println("nodeinfo = ",this.node.toString())
 	if err :=this.Serve();err !=nil{
 		log.Println("Serve udp error: ",err)
 	}
@@ -186,13 +194,19 @@ func (this *DHTNode) Run(){
 
 	for i := range bootstrapNodes{
 		udpAddr, err := net.ResolveUDPAddr("udp",bootstrapNodes[i])
-		if err != nil{
+		if err != nil || udpAddr == nil{
 			log.Println(err)
 			continue
 		}
+		fmt.Println(udpAddr)
 		this.FindNode(udpAddr,generateID())
 	}
+
 	log.Println("Join the DHT network...")
 
 	this.listenConsole()
+}
+
+func (this *node) toString()  string {
+	return fmt.Sprintf("<node-info id:%s, address:%s>",hex.EncodeToString(this.id[:]),this.addr.String())
 }

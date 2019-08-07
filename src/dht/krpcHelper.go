@@ -73,7 +73,7 @@ func (this *KRPCResponse) LoadFromMap(data map[string]interface{}) error{
 	this.transactionID = data["t"].([]byte)
 	data = data["r"].(map[string]interface{})
 	if queryID,ok := data["token"]; ok {
-		copy(this.queryID[:],queryID.([]byte)[:])
+		copy(this.queryID[:],queryID.([]byte))
 	}
 	if token,ok := data["token"]; ok{
 		this.token = string(token.([]byte))
@@ -139,7 +139,7 @@ func (this *KRPCQuery) LoadFormMap(data map[string]interface{}) error{
 		this.transactionID = t.([]byte)
 	}
 	if qtype, ok := data["q"]; ok{
-		this.Type = string(qtype.(string))
+		this.Type = string(qtype.([]byte))
 	}
 
 	data = data["a"].(map[string]interface{})

@@ -63,8 +63,8 @@ func NewTorrent(data []byte) (*Torrent,error){
 			for i:=0 ;i<fileN;i++{
 				if file,ok := files[i].(map[string]interface{}); ok {
 					File := TorrentFile{}
-					if len, ok := file["length"].(int64); ok {
-						File.Length = len
+					if Len, ok := file["length"].(int64); ok {
+						File.Length = Len
 					}
 					if path,ok := file["path"].([]interface{}); ok{
 						File.Path = string(path[0].([]byte))

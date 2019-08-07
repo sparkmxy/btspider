@@ -1,10 +1,8 @@
 package dht
 
 import (
-	"container/list"
 	"encoding/json"
 	"log"
-	"math/big"
 	"net"
 	"os"
 	"sort"
@@ -13,33 +11,33 @@ import (
 
 
 type Kbucket struct{
-	k  				int
-	lastUpdateTime 	time.Time
-	entry			*list.List
-	candidate		*list.List
+	//k  				int
+	LastUpdateTime 	time.Time
+	Entry			[]*node
+	Candidate		[]*node
 }
 
 type IDType [keySize/8]byte
 
-func newKbucket(k int) *Kbucket{
+func newKbucket() *Kbucket{
 	return &Kbucket{
-		k,
+	//	k,
 		time.Now(),
-		list.New(),
-		list.New(),
+		make([]*node,0),
+		make([]*node,0),
 	}
 }
 
 func (this *Kbucket) updateTime(){
-	this.lastUpdateTime = time.Now()
+	this.LastUpdateTime = time.Now()
 }
 
+
 func (this *Kbucket)TryUpdate(o *node) bool{
-	for e := this.entry.Front(); e != nil; e = e.Next(){
-		cur := e.Value.(*node)
-		if cur.id == o.id{
-			this.entry.Remove(e)
-			this.entry.PushFront(o)
+	for i := range this.Entry{
+		if this.Entry[i].id == o.id{
+			copy(this.Entry[1:],this.Entry[:i])
+			this.Entry[0] = o
 			this.updateTime()
 			return true
 		}
@@ -48,7 +46,9 @@ func (this *Kbucket)TryUpdate(o *node) bool{
 }
 
 func (this *Kbucket) PushFront(o *node){
-	this.entry.PushFront(o)
+	this.Entry = append(this.Entry,nil)
+	copy(this.Entry[1:],this.Entry)
+	this.Entry[0]  = o
 	this.updateTime()
 }
 
@@ -62,7 +62,7 @@ type routingTable struct {
 
 	k 			int
 	id			IDType
-	bucket		[keySize]*Kbucket
+	bucket		[]*Kbucket
 
 	timeoutTimers	map[*node]*time.Timer
 	pingTimers      map[*node]*time.Timer
@@ -79,15 +79,35 @@ type routingTable struct {
 	file            string
 }
 
-var pow2 [keySize]big.Int
-
 func getBucketID(a,b *IDType) int{
-	A := new(big.Int).SetBytes(a[:])
-	B := new(big.Int).SetBytes(b[:])
-	dist := *new(big.Int).Xor(A,B)
-	for i:=0;i<keySize;i++{
-		if dist.Cmp(&pow2[i]) < 0 {
-			return i
+	if a == b{
+		return 0
+	}
+	var bitDiff int
+	for i,bit := range a {
+		v := bit ^ b[i]
+		switch {
+		case v > 0x70:
+			bitDiff = 8
+			return i*8 + (8 - bitDiff)
+		case v > 0x40:
+			bitDiff = 7
+			return i*8 + (8 - bitDiff)
+		case v > 0x20:
+			bitDiff = 6
+			return i*8 + (8 - bitDiff)
+		case v > 0x10:
+			bitDiff = 5
+			return i*8 + (8 - bitDiff)
+		case v > 0x08:
+			bitDiff = 4
+			return i*8 + (8 - bitDiff)
+		case v > 0x04:
+			bitDiff = 3
+			return i*8 + (8 - bitDiff)
+		case v > 0x02:
+			bitDiff = 2
+			return i*8 + (8 - bitDiff)
 		}
 	}
 	return -1
@@ -146,24 +166,29 @@ func (this *routingTable)notify(o *node){
 		this.deleteTimeoutEvent(o)
 		this.deletePingEvent(o)
 		this.registerPingEvent(durationToPing,o)
-	}else if bkt.entry.Len() < this.k{
+	}else if len(bkt.Entry) < this.k{
 		bkt.PushFront(o)
 		this.registerPingEvent(durationToPing,o)
 	}else {
-		bkt.candidate.PushFront(o)
-		if bkt.candidate.Len() > this.k {
-			bkt.candidate.Remove(bkt.candidate.Back())
+		bkt.Candidate = append(bkt.Candidate,o)
+		if len(bkt.Candidate) > this.k {
+			copy(bkt.Candidate,bkt.Candidate[1:])
+			bkt.Candidate = bkt.Candidate[:this.k]
 		}
 	}
 }
 
-func closer(target,A,B *IDType) bool{
-	c := new(big.Int).SetBytes(target[:])
-	a := new(big.Int).SetBytes(A[:])
-	b := new(big.Int).SetBytes(B[:])
-	d2 := new(big.Int).Xor(c,a)
-	d1 := new(big.Int).Xor(c,b)
-	return d1.Cmp(d2) < 0
+func closer(target,A,B *IDType) int {
+	for i := range target{
+		a := A[i] ^ target[i]
+		b := B[i] ^ target[i]
+		if a > b{
+			return 1
+		}else if a < b{
+			return -1
+		}
+	}
+	return 0
 }
 
 // TODO: <load> <save> <routines>
@@ -187,8 +212,8 @@ func (this *routingTable) loadFromFile(filepath string) error {
 	for bktid := range data.Buckets {
 		bkt := data.Buckets[bktid]
 		if bkt != nil {
-			for e:=bkt.entry.Front();e!=nil;e=e.Next() {
-				this.Notify(e.Value.(*node))
+			for i := range bkt.Entry{
+				this.Notify(bkt.Entry[i])
 			}
 		}
 	}
@@ -217,18 +242,20 @@ func (this *routingTable) ping(o *node){
 
 func (this *routingTable) deleteNode(o *node){
 	bkt := this.bucket[getBucketID(&this.id,&o.id)]
-	for e:=bkt.entry.Front();e!=nil;e = e.Next(){
-		cur := e.Value.(*node)
-		if o.id == cur.id {
-			bkt.entry.Remove(e)
-			break;
+	i := 0
+	for i < len(bkt.Entry){
+		if bkt.Entry[i].id == o.id{
+			bkt.Entry = append(bkt.Entry[:i],bkt.Entry[i+1:]...)
+		}else {
+			i++
 		}
 	}
-	delete(this.failed,o)
-	if bkt.candidate.Len() > 0{
-		e := bkt.candidate.Front()
-		bkt.entry.PushFront(e)
-		bkt.candidate.Remove(e)
+
+	if len(bkt.Candidate) > 0 {
+		l := len(bkt.Candidate) - 1
+		bkt.PushFront(bkt.Candidate[l])
+		this.registerPingEvent(durationToPing,bkt.Candidate[l])
+		bkt.Candidate = bkt.Candidate[:l]
 	}
 }
 
@@ -266,7 +293,7 @@ func (this *routingTable) routine(){
 /*Public functions*/
 
 func (this *routingTable) Notify(o *node) {
-
+	log.Println("Notify: ",o.addr)
 	if old,ok := this.knownNodes[o.id];ok{
 		o = old
 	}else{
@@ -286,11 +313,10 @@ func (this *routingTable) Stop(){
 func (this *routingTable) ClosestNodes(target *IDType,N int) []node{
 	ret := make([]node,0,N)
 	for i:=0;i<keySize;i++{
-		for e:= this.bucket[i].entry.Front();e!=nil;e = e.Next(){
-			cur := e.Value.(*node)
+		for _,cur := range this.bucket[i].Entry{
 			length := len(ret)
 			idx := sort.Search(length,func(i int) bool{
-				return closer(target,&cur.id,&ret[i].id)
+				return closer(target,&cur.id,&ret[i].id) < 0
 			})
 			if idx == length{
 				if length < N {
@@ -308,10 +334,7 @@ func (this *routingTable) ClosestNodes(target *IDType,N int) []node{
 }
 
 func NewRoutingTable(myid IDType,_k int,_checker Checker) *routingTable{
-	two := big.NewInt(2)
-	for i:=0;i<keySize;i++{
-		pow2[i] = *new(big.Int).Exp(two,big.NewInt(int64(i)),nil)
-	}
+
 	ret := &routingTable{
 		k:					_k,
 		id:					myid,
@@ -324,9 +347,11 @@ func NewRoutingTable(myid IDType,_k int,_checker Checker) *routingTable{
 		failed:				make(map[*node]int),
 		knownNodes:			make(map[IDType]*node),
 		checker:            _checker,
+		file:				"data",
+		bucket:            make([]*Kbucket,keySize),
 	}
 	for i:=0;i<keySize;i++{
-		ret.bucket[i] = newKbucket(_k)
+		ret.bucket[i] = newKbucket()
 	}
 	go ret.routine()
 	ret.loadFromFile(ret.file)

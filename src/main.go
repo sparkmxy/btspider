@@ -24,6 +24,6 @@ func handlePeer(ip string,port int,infohash,peerid string){
 
 func main(){
 	defer collector.Stop()
-	dhtnode.Create("random","0.0.0.0:8661",handlePeer)
+	dhtnode.Create("random","0.0.0.0:8666",handlePeer)
 	dhtnode.Run()
 }

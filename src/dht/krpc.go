@@ -25,10 +25,17 @@ func (this *DHTNode) readUDP(conn *net.UDPConn) error{
 	msg := make([]byte,8192)
 	for{
 		n,address,err := conn.ReadFromUDP(msg)
+		//log.Println("get address = : ",address)
 		if err != nil{
 			return err
 		}
-		go this.handleKRPCPacket(address,msg[:n])
+
+		buf := make([]byte,n)
+		copy(buf,msg)
+		if len(buf) != n{
+			panic("copy error")
+		}
+		go this.handleKRPCPacket(address,buf)
 
 	}
 }
